@@ -1,0 +1,143 @@
+-- =========================================================================
+-- Plugin Name: auto_chat_winner_by👀
+-- Description: Sends a customizable chat message when the Murderer ("Knife") 
+--              or Sheriff ("Gun") dies. Includes custom delay sliders.
+-- =========================================================================
+
+local shared = odh_shared_plugins -- Loads the ODH Shared Plugins API[span_0](start_span)[span_0](end_span)
+
+-- 1. Create the UI Tab and Section
+local my_own_tab = shared.CreateTab("Auto Chat 👀", "") -- Create an exclusive tab for the addon[span_1](start_span)[span_1](end_span)
+local my_own_section = my_own_tab:AddSection("auto_chat_winner_by👀", "Automated chat on role death") -- Create section[span_2](start_span)[span_2](end_span)
+
+-- 2. Add Credits and Explanation
+my_own_section:AddLabel("Credits by axiom (👀)") -- Label for credits[span_3](start_span)[span_3](end_span)
+my_own_section:AddParagraph("How it works", "This addon tracks players. If a player holding a 'Knife' or 'Gun' (in hand or inventory) dies, it will automatically say your chosen text in the chat after the configured delay.") -- Paragraph for explanations[span_4](start_span)[span_4](end_span)
+
+-- 3. State Variables for Configurations
+local config = {
+    murder_toggle = false,
+    murder_text = "gg",
+    murder_delay = 0.1,
+    
+    sheriff_toggle = false,
+    sheriff_text = "gg",
+    sheriff_delay = 0.1
+}
+
+-- 4. UI Elements for Murderer Settings
+my_own_section:AddToggle("Auto chat when murder die", function(state) -- Toggle feature for Murderer[span_5](start_span)[span_5](end_span)
+    config.murder_toggle = state
+end)
+
+my_own_section:AddTextBox("Murder Death Text (Default: gg)", function(text) -- TextBox for custom Murderer text[span_6](start_span)[span_6](end_span)
+    if text and text ~= "" then
+        config.murder_text = text
+    end
+end)
+
+my_own_section:AddSlider("Murderer Delay (Seconds)", 0.1, 100, 1, function(value) -- Slider for delay logic (0.1s to 100s)[span_7](start_span)[span_7](end_span)
+    config.murder_delay = value
+end)
+
+-- 5. UI Elements for Sheriff Settings
+my_own_section:AddToggle("Auto chat when sheriff die", function(state) -- Toggle feature for Sheriff[span_8](start_span)[span_8](end_span)
+    config.sheriff_toggle = state
+end)
+
+my_own_section:AddTextBox("Sheriff Death Text (Default: gg)", function(text) -- TextBox for custom Sheriff text[span_9](start_span)[span_9](end_span)
+    if text and text ~= "" then
+        config.sheriff_text = text
+    end
+end)
+
+my_own_section:AddSlider("Sheriff Delay (Seconds)", 0.1, 100, 1, function(value) -- Slider for delay logic (0.1s to 100s)[span_10](start_span)[span_10](end_span)
+    config.sheriff_delay = value
+end)
+
+-- 6. Core Logic Functions
+local Players = game:GetService("Players")
+
+-- Helper function to check if a player has a specific tool (Gun or Knife)
+local function HasTool(player, toolName)
+    toolName = string.lower(toolName)
+    
+    -- Check their character (equipped)
+    if player.Character then
+        for _, item in ipairs(player.Character:GetChildren()) do
+            if item:IsA("Tool") and string.lower(item.Name) == toolName then
+                return true
+            end
+        end
+    end
+    
+    -- Check their backpack (unequipped)
+    local backpack = player:FindFirstChild("Backpack")
+    if backpack then
+        for _, item in ipairs(backpack:GetChildren()) do
+            if item:IsA("Tool") and string.lower(item.Name) == toolName then
+                return true
+            end
+        end
+    end
+    
+    return false
+end
+
+-- Helper function to send messages reliably based on Roblox's current chat system
+local function SendChatMessage(message)
+    local TextChatService = game:GetService("TextChatService")
+    local ReplicatedStorage = game:GetService("ReplicatedStorage")
+    
+    if TextChatService.ChatVersion == Enum.ChatVersion.TextChatService then
+        -- New Roblox Chat System
+        local generalChannel = TextChatService.TextChannels:FindFirstChild("RBXGeneral")
+        if generalChannel then
+            generalChannel:SendAsync(message)
+        end
+    else
+        -- Legacy Roblox Chat System
+        local chatEvent = ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents")
+        if chatEvent and chatEvent:FindFirstChild("SayMessageRequest") then
+            chatEvent.SayMessageRequest:FireServer(message, "All")
+        end
+    end
+end
+
+-- Function to track a character's life/death state
+local function TrackCharacter(player, character)
+    local humanoid = character:WaitForChild("Humanoid", 5)
+    if not humanoid then return end
+
+    humanoid.Died:Connect(function()
+        -- Murderer Logic
+        if config.murder_toggle and (HasTool(player, "Knife") or HasTool(player, "knife")) then
+            task.delay(config.murder_delay, function()
+                SendChatMessage(config.murder_text)
+            end)
+        end
+        
+        -- Sheriff Logic
+        if config.sheriff_toggle and (HasTool(player, "Gun") or HasTool(player, "gun")) then
+            task.delay(config.sheriff_delay, function()
+                SendChatMessage(config.sheriff_text)
+            end)
+        end
+    end)
+end
+
+-- 7. Initialization and Player Tracking 
+local function TrackPlayer(player)
+    player.CharacterAdded:Connect(function(character)
+        TrackCharacter(player, character)
+    end)
+    if player.Character then
+        TrackCharacter(player, player.Character)
+    end
+end
+
+for _, player in ipairs(Players:GetPlayers()) do
+    TrackPlayer(player)
+end
+
+Players.PlayerAdded:Connect(TrackPlayer)
